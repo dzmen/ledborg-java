@@ -1,10 +1,13 @@
 package me.dzmen.ledborg_server;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Enumeration;
 
 import com.pi4j.io.gpio.GpioController;
 import com.pi4j.io.gpio.GpioFactory;
@@ -13,9 +16,9 @@ import com.pi4j.io.gpio.PinState;
 import com.pi4j.io.gpio.RaspiPin;
 
 
-public class main {
+public class main{
 	
-	public static void main(String[] args){
+	public static void main(String[] args) {
 		new main().host();
 	}
 	
@@ -23,9 +26,22 @@ public class main {
 	static int port = 13579;
 	
 	public void host(){
+		
 		try{
-			System.out.println("Starting ledborg server on " +InetAddress.getLocalHost().getHostAddress() + ":" +port);
+			Enumeration<NetworkInterface> n = NetworkInterface.getNetworkInterfaces();
+		    for (; n.hasMoreElements();)
+		    {
+		        NetworkInterface e = n.nextElement();
+
+		        Enumeration<InetAddress> a = e.getInetAddresses();
+		        for (; a.hasMoreElements();)
+		        {
+		            InetAddress addr = a.nextElement();
+		            System.out.println("Starting ledborg server on ip " + addr.getHostAddress() + ":" +port);
+		        }
+		    }
 			ServerSocket server = new ServerSocket(port);
+			Socket socket = server.accept();
 			
 	        // create gpio controller
 	        final GpioController gpio = GpioFactory.getInstance();
@@ -36,60 +52,35 @@ public class main {
 	        
 			System.out.println("Server started.");
 			
-			//This continuous loop will keep going, so that it can keep accepting requests!
-			while(true){
-				Socket socket = server.accept();
-				System.out.println("Got a connection from "+socket.getInetAddress().getHostAddress());
-				
-				DataInputStream dis = new DataInputStream(socket.getInputStream());
-				DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
-				
-				//Now that we have established a connection, get the client's request, and say it in console
-				String request = dis.readUTF();
-				System.out.println(socket.getInetAddress().getHostAddress()+" sent request: "+request);
-				
-				//Check what the request is
-				if(request.equalsIgnoreCase("RED")){
-					RED.toggle();
-					dos.writeUTF("Enable/Disable RED!");
-					dos.flush();
-				}else if(request.equalsIgnoreCase("BLUE")){
-					BLUE.toggle();
-					dos.writeUTF("Enable/Disable BLUE!");
-					dos.flush();
-				}else if(request.equalsIgnoreCase("GREEN")){
-					GREEN.toggle();
-					dos.writeUTF("Enable/Disable GREEN!");
-					dos.flush();					
-				}else if(request.equalsIgnoreCase("exit")){
-					gpio.shutdown();
-					dos.writeUTF("Quit gpio!");
-					dos.flush();	
-				}else if(request.equalsIgnoreCase("quit")){
-					try{
-						dos.close();
-						dis.close();
-						socket.close();
-					}catch(Exception e){
-						//We do nothing here, because even if we get errors, it will still disconnect!
-					}
-					System.exit(0);
-				}else{
-					dos.writeUTF("Wrong command!");
-					dos.flush();
-				}
-				
-				//Client request is complete - disconnecting!
-				try{
-					dos.close();
-					dis.close();
-					socket.close();
-				}catch(Exception e){
-					//We do nothing here, because even if we get errors, it will still disconnect!
-				}
-				System.out.println("Completed request!");
-			}
 			
+			System.out.println("Got a connection from "+socket.getInetAddress().getHostAddress());
+			
+	        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+	        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			
+	        String input;
+	        while ((input = in.readLine()) != null) {
+	        	// Read input
+				if(input.equalsIgnoreCase("RED")){
+					RED.toggle();
+					out.println("Enable/Disable RED!");
+				}else if(input.equalsIgnoreCase("BLUE")){
+					BLUE.toggle();
+					out.println("Enable/Disable BLUE!");
+				}else if(input.equalsIgnoreCase("GREEN")){
+					GREEN.toggle();
+					out.println("Enable/Disable GREEN!");				
+				}else if(input.equalsIgnoreCase("exit")){
+					gpio.shutdown();
+					out.println("Quit gpio!");
+				}else if(input.equalsIgnoreCase("quit")){
+					break;
+				}
+				System.out.println(socket.getInetAddress().getHostAddress()+" sent request: "+input);
+				System.out.println("Completed request!");
+			
+	    	}
+
 		}catch(Exception e){
 			//e.printStackTrace();
 		}
